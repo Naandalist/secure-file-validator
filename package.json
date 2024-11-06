@@ -23,16 +23,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/secure-file-validator.git"
+    "url": "git+https://github.com/Naandalist/secure-file-validator.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/secure-file-validator/issues"
+    "url": "https://github.com/Naandalist/secure-file-validator/issues"
   },
-  "homepage": "https://github.com/yourusername/secure-file-validator#readme",
-  "devDependencies": {
-    "jest": "^29.0.0",
-    "eslint": "^8.0.0"
-  },
+  "homepage": "https://github.com/Naandalist/secure-file-validator#readme",
   "engines": {
     "node": ">=14.16.0"
   }
