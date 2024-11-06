@@ -227,16 +227,6 @@ const result = await validateFile("file.pdf", {
 - Binary file content is not deeply analyzed
 - Pattern matching is done on string representation of files
 
-## Best Practices
-
-1. Always validate files before processing
-2. Choose appropriate size limits for your use case
-3. Combine with other security like:
-   - File upload limits
-   - Antivirus scanning
-   - Content-Type validation
-   - Sanitization of file names
-
 ## Error Handling
 
 ```javascript
