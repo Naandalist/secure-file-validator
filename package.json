@@ -4,12 +4,27 @@
   "description": "Secure file validation library with signature checking and content validation",
   "type": "module",
   "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
     ".": {
       "import": "./index.js",
       "types": "./index.d.ts"
     }
   },
+  "scripts": {
+    "clean": "rm -rf *.tgz",
+    "type-check": "tsc --noEmit",
+    "pack:dry": "npm pack --dry-run",
+    "test-pack": "npm run pack && npm i -g secure-file-validator-*.tgz",
+    "prepublish:check": "npm run clean && npm run type-check && npm run pack:dry",
+    "publish:public": "npm publish --access public"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
   "keywords": [
     "file-validation",
     "security",
@@ -31,5 +46,12 @@
   "homepage": "https://github.com/Naandalist/secure-file-validator#readme",
   "engines": {
     "node": ">=14.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "secure-file-validator": "file:secure-file-validator-1.0.0.tgz"
   }
 }
