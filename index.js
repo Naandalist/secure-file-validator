@@ -1,163 +1,238 @@
+import { promises as fs } from "fs";
+import path from "path";
+
 /**
  * File signatures based on file format specification
  * Reference: https://en.wikipedia.org/wiki/List_of_file_signatures
  */
-export const FILE_SIGNATURES = {
-    // Image formats
-    'jpeg': [
-        // Standard JPEG/JFIF
-        [255, 216, 255, 224],
-        // JPEG with EXIF
-        [255, 216, 255, 225],
-        // SPIFF JPEG
-        [255, 216, 255, 232],
-        // JPEG-LS
-        [255, 216, 255, 238]
-    ],
-    'png': [
-        // Standard PNG signature
-        [137, 80, 78, 71, 13, 10, 26, 10]
-    ],
-    'gif': [
-        // GIF87a format
-        [71, 73, 70, 56, 55, 97],
-        // GIF89a format
-        [71, 73, 70, 56, 57, 97]
-    ],
-    // Document formats
-    'pdf': [
-        // Standard PDF signature
-        [37, 80, 68, 70, 45] // %PDF-
-    ],
-    // Archive formats
-    'zip': [
-        // Standard ZIP signature
-        [80, 75, 3, 4]
-    ],
-    // Additional security patterns to check
-    SUSPICIOUS_PATTERNS: [
-        /<script/i,
-        /javascript:/i,
-        /<\?php/i,
-        /eval\(/i,
-        /exec\(/i,
-        /system\(/i,
-        /function\s*\(/i,
-        /setTimeout/i,
-        /setInterval/i
-    ]
+const FILE_SIGNATURES = {
+  // Image signatures
+  JPEG: [
+    [0xff, 0xd8, 0xff, 0xe0], // JPEG/JFIF
+    [0xff, 0xd8, 0xff, 0xe1], // JPEG/Exif
+  ],
+  PNG: [[0x89, 0x50, 0x4e, 0x47]], // PNG signature
+  GIF: [[0x47, 0x49, 0x46, 0x38]], // GIF87a or GIF89a
+  // PDF signature
+  PDF: [[0x25, 0x50, 0x44, 0x46]], // %PDF
+  // SVG signatures - checking for XML and SVG tags
+  SVG: [
+    [0x3c, 0x3f, 0x78, 0x6d, 0x6c], // <?xml
+    [0x3c, 0x73, 0x76, 0x67], // <svg
+  ],
 };
 
 /**
- * Compare a buffer with expected file signature
+ * Check if file buffer match with any specified signatures.
+ *
  * @param {Buffer} buffer - File buffer to check
- * @param {Array} signature - Expected signature pattern
- * @returns {boolean} - What is signature match?
+ * @param {Array<Array<number>>} signatures - Array of valid signatures for file type
+ * @returns {boolean} True if buffer match with any of signatures, false otherwise
  */
-export const compareSignature = (buffer, signature) => {
-    if (buffer.length < signature.length) return false;
+const checkFileSignature = (buffer, signatures) => {
+  return signatures.some((signature) => {
     return signature.every((byte, index) => buffer[index] === byte);
+  });
 };
 
 /**
- * Check if a buffer matches a specific file type signature
- * @param {Buffer} buffer - File buffer to check
- * @param {string} type - File type to check against
- * @returns {boolean} - What is file match the type?
+ * Validates content of a file by checking its signature and scanning for suspicious patterns.
+ *
+ * @param {string} filePath - Path to the file to validate
+ * @returns {Promise<Object>} Object containing status (boolean) and message (string)
  */
-export const matchesFileType = (buffer, type) => {
-    const signatures = FILE_SIGNATURES[type];
-    if (!signatures) throw new Error(`Unsupported file type: ${type}`);
-    return signatures.some(sig => compareSignature(buffer, sig));
-};
+const validateFileContent = async (filePath) => {
+  try {
+    // Read file buffer and get extension
+    const fileBuffer = await fs.readFile(filePath);
+    const fileExtension = path.extname(filePath).toLowerCase();
 
-/**
- * Validate file content for identify suspicious pattern
- * @param {Buffer} buffer - File buffer to check
- * @returns {Object} - Validation result with status and message
- */
-export const validateFileContent = (buffer) => {
-    try {
-        const content = buffer.toString();
-        const base64Content = buffer.toString('base64');
-        const decodedContent = Buffer.from(base64Content, 'base64').toString('utf8');
+    // Convert buffer to different string formats for content checking
+    const fileContent = fileBuffer.toString();
+    const base64Content = fileBuffer.toString("base64");
+    const decodedContent = Buffer.from(base64Content, "base64").toString(
+      "utf8"
+    );
 
-        // Check for suspicious patterns
-        for (const pattern of FILE_SIGNATURES.SUSPICIOUS_PATTERNS) {
-            if (pattern.test(content) || pattern.test(decodedContent)) {
-                return {
-                    status: false,
-                    message: `Suspicious pattern detected: ${pattern}`
-                };
-            }
-        }
+    // Patterns that might indicate malicious content
+    const suspiciousPatterns = [
+      /<script/i, // Scripting tags
+      /javascript:/i, // JavaScript protocol
+      /<\?php/i, // PHP code
+      /eval\(/i, // JavaScript eval
+      /exec\(/i, // Command execution
+      /system\(/i, // System commands
+      /function\s*\(/i, // Function declarations
+      /setTimeout/i, // JavaScript timing functions
+      /setInterval/i, // JavaScript timing functions
+      /onload/i, // Event handlers
+      /onerror/i, // Error handlers
+      /ActiveXObject/i, // ActiveX objects
+    ];
 
+    // Validate file signatures based on extension
+    let isValidSignature = false;
+    switch (fileExtension) {
+      case ".jpg":
+      case ".jpeg":
+        isValidSignature = checkFileSignature(fileBuffer, FILE_SIGNATURES.JPEG);
+        break;
+
+      case ".png":
+        isValidSignature = checkFileSignature(fileBuffer, FILE_SIGNATURES.PNG);
+        break;
+
+      case ".gif":
+        isValidSignature = checkFileSignature(fileBuffer, FILE_SIGNATURES.GIF);
+        break;
+
+      case ".svg":
+        isValidSignature = checkFileSignature(fileBuffer, FILE_SIGNATURES.SVG);
+
+        // SVG validation
+        const hasSVGTag = /<svg[^>]*>/i.test(fileContent);
+        const hasValidXML =
+          fileContent.trim().startsWith("<?xml") ||
+          fileContent.trim().startsWith("<svg");
+        isValidSignature = isValidSignature || (hasSVGTag && hasValidXML);
+        break;
+
+      case ".pdf":
+        isValidSignature = checkFileSignature(fileBuffer, FILE_SIGNATURES.PDF);
+
+        // PDF validation
+        const hasPDFSignature = fileContent.includes("%PDF-");
+        const hasEOFMarker = fileContent.includes("%%EOF");
+        isValidSignature = isValidSignature && hasPDFSignature && hasEOFMarker;
+        break;
+
+      default:
         return {
-            status: true,
-            message: 'Content validation passed'
-        };
-    } catch (error) {
-        return {
-            status: false,
-            message: `Content validation failed: ${error.message}`
+          status: false,
+          message: "Unsupported file type",
         };
     }
+
+    // Check if file signature is valid
+    if (!isValidSignature) {
+      return {
+        status: false,
+        message: "Invalid file signature detected",
+      };
+    }
+
+    // Check for suspicious patterns in content
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(decodedContent) || pattern.test(fileContent)) {
+        return {
+          status: false,
+          message: `Suspicious pattern detected: ${pattern}`,
+        };
+      }
+    }
+
+    // SVG-specific security checks
+    if (fileExtension === ".svg") {
+      const svgSuspiciousPatterns = [
+        /xlink:href/i, // External references
+        /[^a-z]href=/i, // Hyperlinks
+        /data:/i, // Data URLs
+        /import/i, // Import statements
+        /foreignObject/i, // Foreign objects
+        /onload/i, // Event handlers
+        /onclick/i, // Click handlers
+        /onmouseover/i, // Mouse event handlers
+        /<!ENTITY/i, // XML entities
+        /<!DOCTYPE/i, // DOCTYPE declarations
+      ];
+
+      for (const pattern of svgSuspiciousPatterns) {
+        if (pattern.test(fileContent)) {
+          return {
+            status: false,
+            message: `Suspicious SVG pattern detected: ${pattern}`,
+          };
+        }
+      }
+    }
+
+    // PDF-specific security checks
+    if (fileExtension === ".pdf") {
+      const pdfSuspiciousPatterns = [
+        /OpenAction/, // Automatic actions
+        /JavaScript/, // JavaScript code
+        /JS/, // JavaScript abbreviation
+        /Launch/, // Launch actions
+        /EmbeddedFile/, // Embedded files
+        /XFA/, // XML Forms Architecture
+      ];
+
+      for (const pattern of pdfSuspiciousPatterns) {
+        if (pattern.test(fileContent)) {
+          return {
+            status: false,
+            message: `Suspicious PDF pattern detected: ${pattern}`,
+          };
+        }
+      }
+    }
+
+    return {
+      status: true,
+      message: "Content validation passed",
+    };
+  } catch (error) {
+    return {
+      status: false,
+      message: `Content validation failed: ${error.message}`,
+    };
+  }
 };
 
 /**
- * File validation including type checking and content validation
- * @param {Buffer} buffer - File buffer to validate
- * @param {string} expectedType - Expected file type
+ * Main file validation function that checks file existence, size, extension, and content.
+ *
+ * @param {string} filePath - Path of file to validate
  * @param {Object} options - Validation options
- * @returns {Object} - Validation result
+ * @param {number} [options.maxSizeInBytes=5242880] - Maximum file size in bytes (default: 5MB)
+ * @returns {Promise<Object>} Object containing status (boolean) and message (string)
  */
-export const validateFile = (buffer, expectedType, options = {}) => {
-    const {
-        maxSize = 5 * 1024 * 1024, // Default 5MB
-        checkContent = true
-    } = options;
+const validateFile = async (filePath, options = {}) => {
+  try {
+    // Default size limit: 5MB
+    const DEFAULT_MAX_SIZE = 5 * 1024 * 1024;
+    const maxSizeInBytes = options.maxSizeInBytes ?? DEFAULT_MAX_SIZE;
 
-    try {
-        // Check file size
-        if (buffer.length > maxSize) {
-            return {
-                status: false,
-                message: 'File size exceeds limit'
-            };
-        }
+    // Check if file exists
+    const stats = await fs.stat(filePath);
 
-        // Check file signature
-        if (!matchesFileType(buffer, expectedType)) {
-            return {
-                status: false,
-                message: `Invalid file signature for type: ${expectedType}`
-            };
-        }
-
-        // Validate content if required
-        if (checkContent) {
-            const contentValidation = validateFileContent(buffer);
-            if (!contentValidation.status) {
-                return contentValidation;
-            }
-        }
-
-        return {
-            status: true,
-            message: 'File validation passed'
-        };
-    } catch (error) {
-        return {
-            status: false,
-            message: `Validation failed: ${error.message}`
-        };
+    // Check file size with configurable limit
+    if (stats.size > maxSizeInBytes) {
+      const sizeMB = Math.round(maxSizeInBytes / (1024 * 1024));
+      return {
+        status: false,
+        message: `File size exceeds limit of ${sizeMB}MB`,
+      };
     }
+
+    // Rest of the validation code remains the same...
+    const allowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".pdf", ".svg"];
+    const fileExtension = path.extname(filePath).toLowerCase();
+    if (!allowedExtensions.includes(fileExtension)) {
+      return {
+        status: false,
+        message: "Invalid file extension",
+      };
+    }
+
+    const contentValidation = await validateFileContent(filePath);
+    return contentValidation;
+  } catch (error) {
+    return {
+      status: false,
+      message: `File validation failed: ${error.message}`,
+    };
+  }
 };
 
-/**
- * Get supported file types
- * @returns {Array} - List of supported file types
- */
-export const getSupportedTypes = () => {
-    return Object.keys(FILE_SIGNATURES).filter(key => key !== 'SUSPICIOUS_PATTERNS');
-};
+export { validateFile, validateFileContent, checkFileSignature };
