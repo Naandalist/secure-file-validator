@@ -1,1 +1,6 @@
 tests/
+.github/
+.gitignore
+.npmignore
+tsconfig.json
+*.tgz
