@@ -140,6 +140,8 @@ Main validation function that performs all checks.
 | `options `               | Object | Configuration options        | `{}`     |
 | `options.maxSizeInBytes` | number | Maximum file size in bytes   | 5MB      |
 
+<br>
+
 | Return Type               | Description                          |
 | ------------------------- | ------------------------------------ |
 | `Promise<Object>`         | Async result object                  |
@@ -153,6 +155,8 @@ Performs content-specific validation.
 | Parameter  | Type   | Description                  | Default  |
 | ---------- | ------ | ---------------------------- | -------- |
 | `filePath` | string | Path to the file to validate | required |
+
+<br>
 
 | Return Type               | Description                          |
 | ------------------------- | ------------------------------------ |
@@ -168,6 +172,8 @@ Checks file buffer against known signatures.
 | ------------ | ---------------------- | --------------------------------- | -------- |
 | `buffer`     | Buffer                 | File buffer to check              | required |
 | `signatures` | `Array<Array<number>>` | Valid signatures to check against | required |
+
+<br>
 
 | Return Type | Description                                |
 | ----------- | ------------------------------------------ |

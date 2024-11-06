@@ -1,6 +1,6 @@
 {
   "name": "secure-file-validator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Secure file validation library with signature checking and content validation",
   "type": "module",
   "main": "index.js",
@@ -50,8 +50,5 @@
   "devDependencies": {
     "@types/node": "^22.9.0",
     "typescript": "^5.6.3"
-  },
-  "dependencies": {
-    "secure-file-validator": "file:secure-file-validator-1.0.0.tgz"
   }
 }
