@@ -1,4 +1,5 @@
-import { validateFile } from "../index.js";
+// import { validateFile } from "../index.js";
+import { validateFile } from 'secure-file-validator';
 import path from "path";
 import { fileURLToPath } from "url";
 
