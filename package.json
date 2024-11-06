@@ -1,0 +1,39 @@
+{
+  "name": "secure-file-validator",
+  "version": "1.0.0",
+  "description": "Secure file validation library with signature checking and content validation",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "keywords": [
+    "file-validation",
+    "security",
+    "file-type",
+    "mime-type",
+    "signature-check",
+    "file-security",
+    "esm"
+  ],
+  "author": "Listiananda Apriliawan <listiananda.apriliawan@gmail.com> (https://naandalist.com/)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/secure-file-validator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/secure-file-validator/issues"
+  },
+  "homepage": "https://github.com/yourusername/secure-file-validator#readme",
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=14.16.0"
+  }
+}
