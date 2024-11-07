@@ -1,6 +1,6 @@
 {
   "name": "secure-file-validator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Secure file validation library with signature checking and content validation",
   "type": "module",
   "main": "index.js",
