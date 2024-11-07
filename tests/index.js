@@ -14,6 +14,7 @@ const runTests = async () => {
     path.join(__dirname, "./assets/image-sample-injected.jpg"),
     path.join(__dirname, "./assets/icon-sample-injected.svg"),
     path.join(__dirname, "./assets/icon-sample.svg"),
+    path.join(__dirname, "./assets/eicar-adobe-acrobat-javascript-alert.pdf"),
   ];
 
   console.log("\nRunning file validation tests...\n");
