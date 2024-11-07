@@ -165,6 +165,8 @@ const validateFileContent = async (filePath) => {
         /Launch/, // Launch actions
         /EmbeddedFile/, // Embedded files
         /XFA/, // XML Forms Architecture
+        /Annots/,
+        /Metadata/,
       ];
 
       for (const pattern of pdfSuspiciousPatterns) {
