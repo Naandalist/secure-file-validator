@@ -21,9 +21,7 @@ This library is built following industry-standard security guidelines:
 - 🛡️ Built-in security checks for PDF and SVG files
 - 📦 Zero dependencies
 - 🌟 TypeScript support
-- 🔍 Configurable file size validation
-- ⚙️ Customizable options
-
+- ⚙️  Customizable file size validation
 ## Installation
 
 ```bash
