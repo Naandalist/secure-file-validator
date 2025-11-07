@@ -71,6 +71,37 @@ try {
 }
 ```
 
+### PDF Whitelist for False Positive Handling
+
+The library includes security checks for potentially dangerous PDF patterns. However, some legitimate PDFs may contain patterns like `/Metadata/`, `/OpenAction/`, or `/JS/` that are flagged as suspicious. You can use the `pdfWhitelist` option to allow specific patterns:
+
+```javascript
+import { validateFile } from "secure-file-validator";
+
+// Allow Metadata and OpenAction patterns in PDFs
+const result = await validateFile("path/to/file.pdf", {
+  pdfWhitelist: ['Metadata', 'OpenAction', 'JS']
+});
+
+if (result.status) {
+  console.log("File is valid:", result.message);
+} else {
+  console.log("File validation failed:", result.message);
+}
+```
+
+**Available PDF patterns to whitelist:**
+- `Metadata` - PDF metadata (commonly found in legitimate PDFs)
+- `OpenAction` - Automatic actions when PDF is opened
+- `JS` - JavaScript abbreviation
+- `JavaScript` - JavaScript code
+- `Launch` - Launch actions
+- `EmbeddedFile` - Embedded files
+- `XFA` - XML Forms Architecture
+- `Annots` - Annotations
+
+**Note:** Only whitelist patterns you trust. Whitelisting patterns reduces security checks and should be done carefully based on your specific use case.
+
 ### Using Size Constants
 
 ```javascript
@@ -111,8 +142,18 @@ async function validateUserUpload(filePath) {
   }
 
   // Then, perform additional content validation if needed
-  const contentValidation = await validateFileContent(filePath);
+  const contentValidation = await validateFileContent(filePath, options);
   return contentValidation;
+}
+
+// Example: PDF validation with whitelist for common patterns
+async function validatePDFWithWhitelist(filePath) {
+  const result = await validateFile(filePath, {
+    maxSizeInBytes: 10 * 1024 * 1024, // 10MB
+    pdfWhitelist: ['Metadata', 'OpenAction'], // Allow these common patterns
+  });
+  
+  return result;
 }
 ```
 
@@ -132,11 +173,12 @@ async function validateUserUpload(filePath) {
 
 Main validation function that performs all checks.
 
-| Parameter                | Type   | Description                  | Default  |
-| ------------------------ | ------ | ---------------------------- | -------- |
-| `filePath`               | string | Path to the file to validate | required |
-| `options `               | Object | Configuration options        | `{}`     |
-| `options.maxSizeInBytes` | number | Maximum file size in bytes   | 5MB      |
+| Parameter                | Type       | Description                                                     | Default  |
+| ------------------------ | ---------- | --------------------------------------------------------------- | -------- |
+| `filePath`               | string     | Path to the file to validate                                    | required |
+| `options `               | Object     | Configuration options                                           | `{}`     |
+| `options.maxSizeInBytes` | number     | Maximum file size in bytes                                      | 5MB      |
+| `options.pdfWhitelist`   | `string[]` | Array of PDF patterns to whitelist (e.g., `['Metadata', 'JS']`) | `[]`     |
 
 <br>
 
@@ -146,13 +188,15 @@ Main validation function that performs all checks.
 | `Promise<Object>.status`  | boolean indicating validation result |
 | `Promise<Object>.message` | string containing detailed message   |
 
-### validateFileContent(filePath)
+### validateFileContent(filePath, options)
 
 Performs content-specific validation.
 
-| Parameter  | Type   | Description                  | Default  |
-| ---------- | ------ | ---------------------------- | -------- |
-| `filePath` | string | Path to the file to validate | required |
+| Parameter              | Type       | Description                                                     | Default  |
+| ---------------------- | ---------- | --------------------------------------------------------------- | -------- |
+| `filePath`             | string     | Path to the file to validate                                    | required |
+| `options `             | Object     | Configuration options                                           | `{}`     |
+| `options.pdfWhitelist` | `string[]` | Array of PDF patterns to whitelist (e.g., `['Metadata', 'JS']`) | `[]`     |
 
 <br>
 
@@ -269,6 +313,17 @@ A: The default limit is 5MB if no custom limit is specified.
 
 **Q: Can I set unlimited file size?**  
 A: While technically possible by setting a very large number, it's not recommended as files are read into memory during validation.
+
+**Q: I'm getting false positives on legitimate PDFs. What should I do?**  
+A: Some legitimate PDFs contain patterns like `/Metadata/` or `/OpenAction/` that are flagged as suspicious. You can use the `pdfWhitelist` option to allow these specific patterns:
+
+```javascript
+const result = await validateFile("file.pdf", {
+  pdfWhitelist: ['Metadata', 'OpenAction', 'JS']
+});
+```
+
+Only whitelist patterns you understand and trust, as this reduces security checks.
 
 **Q: How can I handle different size limits for different file types?**  
 A: You can create a wrapper function:
