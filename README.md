@@ -14,14 +14,13 @@ This library is built following industry-standard security guidelines:
 
 ## Features
 
-- 🔒 Secure file signature validation
-- 📝 Content pattern scanning for malicious code
-- 🎯 Support for multiple file types (JPEG, PNG, GIF, PDF, SVG)
-- ⚡ Promise-based async/await API
-- 🛡️ Built-in security checks for PDF and SVG files
-- 📦 Zero dependencies
-- 🌟 TypeScript support
-- ⚙️  Customizable file size validation
+- Secure file signature validation
+- Content pattern scanning for malicious code
+- Support for multiple file types (JPEG, PNG, GIF, PDF, SVG)
+- Built-in security checks for PDF and SVG files
+- Whitelist feature to handle false positive detections
+- Zero dependencies
+- Customizable file size validation
 ## Installation
 
 ```bash
