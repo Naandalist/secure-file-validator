@@ -39,9 +39,11 @@ const checkFileSignature = (buffer, signatures) => {
  * Validates content of a file by checking its signature and scanning for suspicious patterns.
  *
  * @param {string} filePath - Path to the file to validate
+ * @param {Object} options - Validation options
+ * @param {Array<string>} [options.pdfWhitelist=[]] - Array of PDF patterns to whitelist (e.g., ['Metadata', 'OpenAction'])
  * @returns {Promise<Object>} Object containing status (boolean) and message (string)
  */
-const validateFileContent = async (filePath) => {
+const validateFileContent = async (filePath, options = {}) => {
   try {
     // Read file buffer and get extension
     const fileBuffer = await fs.readFile(filePath);
@@ -158,18 +160,24 @@ const validateFileContent = async (filePath) => {
 
     // PDF-specific security checks
     if (fileExtension === ".pdf") {
+      const pdfWhitelist = options.pdfWhitelist || [];
       const pdfSuspiciousPatterns = [
-        /OpenAction/, // Automatic actions
-        /JavaScript/, // JavaScript code
-        /JS/, // JavaScript abbreviation
-        /Launch/, // Launch actions
-        /EmbeddedFile/, // Embedded files
-        /XFA/, // XML Forms Architecture
-        /Annots/,
-        /Metadata/,
+        { pattern: /OpenAction/, name: "OpenAction" }, // Automatic actions
+        { pattern: /JavaScript/, name: "JavaScript" }, // JavaScript code
+        { pattern: /JS/, name: "JS" }, // JavaScript abbreviation
+        { pattern: /Launch/, name: "Launch" }, // Launch actions
+        { pattern: /EmbeddedFile/, name: "EmbeddedFile" }, // Embedded files
+        { pattern: /XFA/, name: "XFA" }, // XML Forms Architecture
+        { pattern: /Annots/, name: "Annots" },
+        { pattern: /Metadata/, name: "Metadata" },
       ];
 
-      for (const pattern of pdfSuspiciousPatterns) {
+      for (const { pattern, name } of pdfSuspiciousPatterns) {
+        // Skip patterns that are in the whitelist
+        if (pdfWhitelist.includes(name)) {
+          continue;
+        }
+        
         if (pattern.test(fileContent)) {
           return {
             status: false,
@@ -197,6 +205,7 @@ const validateFileContent = async (filePath) => {
  * @param {string} filePath - Path of file to validate
  * @param {Object} options - Validation options
  * @param {number} [options.maxSizeInBytes=5242880] - Maximum file size in bytes (default: 5MB)
+ * @param {Array<string>} [options.pdfWhitelist=[]] - Array of PDF patterns to whitelist (e.g., ['Metadata', 'OpenAction'])
  * @returns {Promise<Object>} Object containing status (boolean) and message (string)
  */
 const validateFile = async (filePath, options = {}) => {
@@ -227,7 +236,7 @@ const validateFile = async (filePath, options = {}) => {
       };
     }
 
-    const contentValidation = await validateFileContent(filePath);
+    const contentValidation = await validateFileContent(filePath, options);
     return contentValidation;
   } catch (error) {
     return {
