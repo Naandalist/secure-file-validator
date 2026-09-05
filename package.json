@@ -14,7 +14,7 @@
   "scripts": {
     "clean": "rm -rf *.tgz",
     "type-check": "tsc --noEmit",
-    "test": "node --test tests/validate-file.test.js",
+    "test": "node --test tests/*.test.js",
     "pack:dry": "npm pack --dry-run",
     "test-pack": "npm run pack && npm i -g secure-file-validator-*.tgz",
     "prepublish:check": "npm run clean && npm run type-check && npm test && npm run pack:dry",

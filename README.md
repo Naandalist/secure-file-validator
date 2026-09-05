@@ -15,12 +15,12 @@ This library is built following industry-standard security guidelines:
 ## Features
 
 - Secure file signature validation
-- Content pattern scanning for malicious code
-- Support for multiple file types (JPEG, PNG, GIF, PDF, SVG)
-- Built-in security checks for PDF and SVG files
-- Token-aware PDF policy with safe defaults
-- Zero dependencies
+- Token-aware PDF policy and scoped SVG checks
+- Accepts filesystem paths, Buffer, and Uint8Array
+- Structured `{ ok, code, message }` results
+- Zero runtime dependencies
 - Customizable file size validation
+
 ## Installation
 
 ```bash
@@ -29,88 +29,74 @@ npm install secure-file-validator
 
 ## Usage
 
-### Basic Usage (Default 5MB limit)
-
 ```javascript
 import { validateFile } from "secure-file-validator";
 
-try {
-  const result = await validateFile("path/to/your/file.pdf");
+const result = await validateFile("path/to/your/file.pdf");
 
-  if (result.status) {
-    console.log("File is valid:", result.message);
-  } else {
-    console.log("File validation failed:", result.message);
-  }
-} catch (error) {
-  console.error("Error:", error);
+if (result.ok) {
+  console.log("File is valid:", result.code);
+} else {
+  console.log("File validation failed:", result.code, result.message);
 }
 ```
 
-### Custom File Size Limit
+### In-memory bytes (multer / uploads)
 
 ```javascript
-import { validateFile } from "secure-file-validator";
+import { validateFile, validateBytes } from "secure-file-validator";
 
-const TEN_MB = 10 * 1024 * 1024;
+const result = await validateFile(req.file.buffer, {
+  filename: req.file.originalname,
+});
 
-try {
-  const result = await validateFile("path/to/your/file.pdf", {
-    maxSizeInBytes: TEN_MB,
-  });
-
-  if (result.status) {
-    console.log("File is valid:", result.message);
-  } else {
-    console.log("File validation failed:", result.message);
-  }
-} catch (error) {
-  console.error("Error:", error);
+if (!result.ok) {
+  throw new Error(result.code);
 }
+
+const sync = validateBytes(req.file.buffer, { extension: ".png" });
 ```
 
 ### PDF policy
 
-PDF checks look for **name tokens** such as `/JavaScript` and `/JS` in the document and in inflated streams. They do not treat the letters `JS` or the word `Metadata` inside XMP as a hit.
-
 Allowed by default: `/Metadata`, `/Annots`, `/OpenAction`.
 Denied by default: `/JS`, `/JavaScript`, `/Launch`, `/EmbeddedFile`, `/XFA`, `/RichMedia`.
 
-Prefer the structured `pdf` policy. `allowJavaScript` covers both `/JS` and `/JavaScript`. `pdfWhitelist` still works as a deprecated alias.
-
 ```javascript
-import { validateFile } from "secure-file-validator";
-
-// Safe: defaults already allow metadata. This only tightens OpenAction.
 const strict = await validateFile("path/to/file.pdf", {
   pdf: { allowOpenAction: false }
 });
 
-// Dangerous: you fully trust a PDF that contains JavaScript
+// Dangerous: disables the script check
 const trusted = await validateFile("path/to/file.pdf", {
   pdf: { allowJavaScript: true }
 });
 ```
 
-**Note:** `allowJavaScript: true` disables the script check. Do not turn it on to silence a metadata false positive.
-
 ## API Reference
 
-### validateFile(filePath, options)
+### validateFile(input, options)
+
+`input` is a filesystem path, `Buffer`, or `Uint8Array`.
 
 | Parameter | Type | Description | Default |
 | --- | --- | --- | --- |
-| `filePath` | string | Path to the file to validate | required |
+| `input` | `string \| Buffer \| Uint8Array` | Path or in-memory bytes | required |
 | `options.maxSizeInBytes` | number | Maximum file size in bytes | 5MB |
+| `options.filename` | string | Required for buffer input if `extension` is omitted | — |
+| `options.extension` | string | File type for buffer input (`.png` or `png`) | — |
 | `options.pdf` | `PdfPolicy` | Structured allow/deny flags for PDF tokens | see defaults above |
+| `options.svg` | `SvgPolicy` | Optional SVG allow flags | deny foreignObject / data / external href |
 | `options.pdfWhitelist` | `string[]` | Deprecated alias mapped onto `pdf` allow flags | `[]` |
 
-Returns `{ status: boolean, message: string }`.
+Returns `{ ok, status, code, message, details? }`. `status` is a deprecated alias of `ok`.
+
+Use `validateBytes(buffer, options)` for a sync result when you already have bytes.
 
 ## FAQ
 
 **Q: I'm getting false positives on legitimate PDFs. What should I do?**  
-A: `/Metadata`, `/Annots`, and `/OpenAction` are allowed by default. A file should not be rejected just because it contains those tokens or the letters `JS` in ordinary text. If a PDF is still rejected, check the message for the actual name token (`/JavaScript`, `/Launch`, …). Only whitelist a denied token if you intentionally accept that feature.
+A: `/Metadata`, `/Annots`, and `/OpenAction` are allowed by default. If a PDF is still rejected, switch on `result.code` (`PDF_JAVASCRIPT`, `PDF_LAUNCH`, …). Only allow a denied token if you intentionally accept that feature.
 
 ## License
 

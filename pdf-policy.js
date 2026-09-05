@@ -44,6 +44,17 @@ const PDF_TOKEN_CHECK_ORDER = [
   "Annots",
   "Metadata",
 ];
+const PDF_TOKEN_CODE = {
+  JavaScript: "PDF_JAVASCRIPT",
+  JS: "PDF_JAVASCRIPT",
+  Launch: "PDF_LAUNCH",
+  EmbeddedFile: "PDF_EMBEDDED_FILE",
+  XFA: "PDF_XFA",
+  RichMedia: "PDF_RICH_MEDIA",
+  OpenAction: "PDF_OPEN_ACTION",
+  Annots: "PDF_ANNOTS",
+  Metadata: "PDF_METADATA",
+};
 
 const decodePdfName = (raw) =>
   raw.replace(/#([0-9A-Fa-f]{2})/g, (_, hex) =>
@@ -68,8 +79,7 @@ const stripStreamWrappers = (payload) => {
   }
   if (
     payload.length >= 1 &&
-    (payload[payload.length - 1] === 0x0a ||
-      payload[payload.length - 1] === 0x0d)
+    (payload[payload.length - 1] === 0x0a || payload[payload.length - 1] === 0x0d)
   ) {
     return payload.subarray(0, payload.length - 1);
   }
@@ -91,30 +101,21 @@ const tryInflate = (payload) => {
 const inflatePdfStreams = (buffer) => {
   const texts = [];
   let idx = 0;
-
   while (idx < buffer.length) {
     const start = buffer.indexOf("stream", idx);
     if (start === -1) break;
-
     let payloadStart = start + 6;
     if (buffer[payloadStart] === 0x0d && buffer[payloadStart + 1] === 0x0a) {
       payloadStart += 2;
     } else if (buffer[payloadStart] === 0x0a || buffer[payloadStart] === 0x0d) {
       payloadStart += 1;
     }
-
     const end = buffer.indexOf("endstream", payloadStart);
     if (end === -1) break;
-
-    const inflated = tryInflate(
-      stripStreamWrappers(buffer.subarray(payloadStart, end))
-    );
-    if (inflated) {
-      texts.push(inflated.toString("latin1"));
-    }
+    const inflated = tryInflate(stripStreamWrappers(buffer.subarray(payloadStart, end)));
+    if (inflated) texts.push(inflated.toString("latin1"));
     idx = end + 9;
   }
-
   return texts;
 };
 
@@ -130,36 +131,32 @@ const collectPdfNames = (buffer) => {
 const resolvePdfPolicy = (options = {}) => {
   const policy = { ...PDF_DEFAULT_POLICY };
   const overrides = options.pdf;
-
   if (overrides && typeof overrides === "object") {
     for (const key of Object.keys(PDF_DEFAULT_POLICY)) {
-      if (typeof overrides[key] === "boolean") {
-        policy[key] = overrides[key];
-      }
+      if (typeof overrides[key] === "boolean") policy[key] = overrides[key];
     }
   }
-
   for (const name of options.pdfWhitelist || []) {
     const flag = PDF_WHITELIST_ALIAS[name];
     if (flag) policy[flag] = true;
   }
-
   return policy;
 };
 
 export const inspectPdfTokens = (buffer, options = {}) => {
   const policy = resolvePdfPolicy(options);
   const names = collectPdfNames(buffer);
-
   for (const name of PDF_TOKEN_CHECK_ORDER) {
     if (!names.has(name)) continue;
     const flag = PDF_TOKEN_FLAG[name];
     if (policy[flag]) continue;
     return {
+      ok: false,
       status: false,
+      code: PDF_TOKEN_CODE[name] || "PDF_TOKEN",
       message: `Suspicious PDF name token detected: /${name}`,
+      details: { token: name },
     };
   }
-
   return null;
 };
