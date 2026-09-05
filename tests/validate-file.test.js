@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { validateFile, checkFileSignature } from "../index.js";
 
@@ -55,19 +57,64 @@ test("accepts the legitimate PDF sample", async () => {
 test("rejects a PDF that contains a JavaScript name", async () => {
   const result = await validateFile(asset("doc-sample-injected.pdf"));
   assert.equal(result.status, false);
-  assert.match(result.message, /JavaScript/);
+  assert.match(result.message, /\/(?:JavaScript|JS)/);
 });
 
 test("rejects the EICAR JavaScript PDF", async () => {
   const result = await validateFile(asset("eicar-adobe-acrobat-javascript-alert.pdf"));
   assert.equal(result.status, false);
+  assert.match(result.message, /\/(?:JavaScript|JS)/);
 });
 
-test("does not treat Metadata-only whitelist as a free pass for JS PDFs", { skip: "blocked by #3/#4 — current scanner returns first hit (/Metadata/) and then skips remaining checks incorrectly when that name is whitelisted" }, async () => {
+test("does not treat Metadata-only whitelist as a free pass for JS PDFs", async () => {
   const result = await validateFile(asset("eicar-adobe-acrobat-javascript-alert.pdf"), {
     pdfWhitelist: ["Metadata"],
   });
-  assert.equal(result.status, false, "JS-bearing PDFs must still fail after Metadata is allowed");
+  assert.equal(result.status, false, result.message);
+  assert.match(result.message, /\/(?:JavaScript|JS)/);
+});
+
+test("allows Metadata and OpenAction tokens by default", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "meta.pdf");
+  await writeFile(
+    file,
+    "%PDF-1.4\n1 0 obj<</Metadata 2 0 R/OpenAction 3 0 R/Annots[]>>endobj\n%%EOF\n"
+  );
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, true, result.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("does not flag the letters JS unless they form a /JS name token", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "letters.pdf");
+  await writeFile(
+    file,
+    "%PDF-1.4\n1 0 obj<</Title (Not a JS token, just JSON-like text)>>endobj\n%%EOF\n"
+  );
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, true, result.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("detects hex-escaped PDF JavaScript names", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "escaped.pdf");
+  await writeFile(file, "%PDF-1.4\n1 0 obj<</J#53 2 0 R>>endobj\n%%EOF\n");
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, false, result.message);
+    assert.match(result.message, /\/JS/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("checkFileSignature matches a PNG header", () => {
