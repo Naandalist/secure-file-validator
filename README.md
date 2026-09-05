@@ -4,24 +4,39 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/secure-file-validator.svg)](https://nodejs.org)
 
-A secure file validation library for Node.js that performs signature checking and content validation. It hardenings app from malicious file uploads by validating file types, checking file signatures, and scanning for suspicious patterns.
+Node.js helper for **upload type checks**: extension, size, magic numbers, plus a small PDF/SVG content policy.
 
-This library is built following industry-standard security guidelines:
+It is aligned with the *file-type checking* portion of [OWASP Unrestricted File Upload](https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload) and [CWE-434](https://cwe.mitre.org/data/definitions/434.html). It is **not** a complete upload-security program and it is **not** an antivirus.
 
-- [OWASP Unrestricted File Upload Prevention](https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload)
-- [CWE-434: Unrestricted Upload of File with Dangerous Type](https://cwe.mitre.org/data/definitions/434.html)
-- [NIST Security Guidelines for File Uploads](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf)
+## What this library does
 
-## Features
+- Rejects disallowed extensions (JPEG, PNG, GIF, PDF, SVG only).
+- Enforces a size cap (default 5MB).
+- Checks magic numbers against the declared extension (JPEG is `FF D8 FF`, any marker).
+- PDF: looks for **name tokens** (`/JS`, `/JavaScript`, `/Launch`, …) in the body and in inflated Flate streams. It does not treat the letters `JS` inside ordinary text or XMP as a hit.
+- SVG: rejects script, event handlers, and XXE entities; optionally rejects `foreignObject`, `data:` URIs, and external `href`.
+- Accepts a filesystem path, `Buffer`, or `Uint8Array`.
+- Returns `{ ok, code, message, details? }`. `status` is a deprecated alias of `ok`.
 
-- Secure file signature validation
-- Token-aware PDF policy and scoped SVG checks
-- Accepts filesystem paths, Buffer, and Uint8Array
-- Structured `{ ok, code, message }` results
-- Zero runtime dependencies
-- Customizable file size validation
+## What this library does not do
 
-## Installation
+- Scan for malware, macros, or EICAR as a virus product.
+- Unpack or inspect ZIP/Office/XML containers beyond the PDF/SVG rules above.
+- Detect zip bombs, pixel bombs, or decompression bombs in general.
+- Sanitize filenames, stop path traversal, or pick a storage layout.
+- Set `Content-Type` or decide how the file is served.
+- Replace server-side auth, rate limits, or a content-security policy.
+
+Those belong in the rest of the upload pipeline.
+
+## Suggested pipeline
+
+1. Validate the **bytes** with this library (`validateFile(buffer, { filename })`).
+2. Store under a **generated name**, not the original filename.
+3. Keep uploads **outside the webroot**.
+4. Serve with a fixed `Content-Type` you chose, not one taken from the client.
+
+## Install
 
 ```bash
 npm install secure-file-validator
@@ -35,9 +50,9 @@ import { validateFile } from "secure-file-validator";
 const result = await validateFile("path/to/your/file.pdf");
 
 if (result.ok) {
-  console.log("File is valid:", result.code);
+  console.log("valid", result.code);
 } else {
-  console.log("File validation failed:", result.code, result.message);
+  console.log(result.code, result.message);
 }
 ```
 
@@ -57,47 +72,79 @@ if (!result.ok) {
 const sync = validateBytes(req.file.buffer, { extension: ".png" });
 ```
 
-### PDF policy
+## PDF policy
 
-Allowed by default: `/Metadata`, `/Annots`, `/OpenAction`.
-Denied by default: `/JS`, `/JavaScript`, `/Launch`, `/EmbeddedFile`, `/XFA`, `/RichMedia`.
+Checks look for PDF **name objects**, including hex-escaped names (`/J#53` → `/JS`) and names inside inflated streams.
+
+| Token | Default | Code |
+| --- | --- | --- |
+| `/Metadata` | allow | `PDF_METADATA` |
+| `/Annots` | allow | `PDF_ANNOTS` |
+| `/OpenAction` | allow | `PDF_OPEN_ACTION` |
+| `/JS`, `/JavaScript` | deny | `PDF_JAVASCRIPT` |
+| `/Launch` | deny | `PDF_LAUNCH` |
+| `/EmbeddedFile` | deny | `PDF_EMBEDDED_FILE` |
+| `/XFA` | deny | `PDF_XFA` |
+| `/RichMedia` | deny | `PDF_RICH_MEDIA` |
 
 ```javascript
-const strict = await validateFile("path/to/file.pdf", {
-  pdf: { allowOpenAction: false }
+const strict = await validateFile(pdfPath, {
+  pdf: { allowOpenAction: false },
 });
 
-// Dangerous: disables the script check
-const trusted = await validateFile("path/to/file.pdf", {
-  pdf: { allowJavaScript: true }
+// Dangerous: turns off the script check
+const trusted = await validateFile(pdfPath, {
+  pdf: { allowJavaScript: true },
 });
 ```
 
-## API Reference
+`pdfWhitelist: ['JavaScript']` still works as a deprecated alias. Do **not** allow JavaScript just to silence a metadata hit — metadata is already allowed. See [#1](https://github.com/Naandalist/secure-file-validator/issues/1).
 
-### validateFile(input, options)
+## SVG policy
 
-`input` is a filesystem path, `Buffer`, or `Uint8Array`.
+Always denied: `<script>`, `javascript:`, event handlers (`onload=` …), `<!ENTITY`.
 
-| Parameter | Type | Description | Default |
-| --- | --- | --- | --- |
-| `input` | `string \| Buffer \| Uint8Array` | Path or in-memory bytes | required |
-| `options.maxSizeInBytes` | number | Maximum file size in bytes | 5MB |
-| `options.filename` | string | Required for buffer input if `extension` is omitted | — |
-| `options.extension` | string | File type for buffer input (`.png` or `png`) | — |
-| `options.pdf` | `PdfPolicy` | Structured allow/deny flags for PDF tokens | see defaults above |
-| `options.svg` | `SvgPolicy` | Optional SVG allow flags | deny foreignObject / data / external href |
-| `options.pdfWhitelist` | `string[]` | Deprecated alias mapped onto `pdf` allow flags | `[]` |
+Denied by default, overridable with `options.svg`:
 
-Returns `{ ok, status, code, message, details? }`. `status` is a deprecated alias of `ok`.
+| Rule | Default | Code |
+| --- | --- | --- |
+| `foreignObject` | deny | `SVG_FOREIGN_OBJECT` |
+| `data:` URI | deny | `SVG_DATA_URI` |
+| external `href` | deny | `SVG_EXTERNAL_HREF` |
 
-Use `validateBytes(buffer, options)` for a sync result when you already have bytes.
+`DOCTYPE` without `ENTITY` and fragment `href="#id"` are allowed.
+
+## API
+
+### `validateFile(input, options)`
+
+`input` is a path, `Buffer`, or `Uint8Array`.
+
+| Parameter | Type | Default |
+| --- | --- | --- |
+| `options.maxSizeInBytes` | number | 5MB |
+| `options.filename` | string | required for buffers if `extension` is omitted |
+| `options.extension` | string | `.png` or `png` |
+| `options.pdf` | `PdfPolicy` | see table |
+| `options.svg` | `SvgPolicy` | see table |
+| `options.pdfWhitelist` | string[] | deprecated alias |
+
+`validateBytes(buffer, options)` is the sync form for in-memory bytes.
+
+`validateFileContent` still exists and accepts the same input types.
+
+### Result codes
+
+`OK`, `UNSUPPORTED_TYPE`, `INVALID_EXTENSION`, `TOO_LARGE`, `INVALID_SIGNATURE`, `IO_ERROR`, plus the PDF/SVG codes in the tables above.
 
 ## FAQ
 
-**Q: I'm getting false positives on legitimate PDFs. What should I do?**  
-A: `/Metadata`, `/Annots`, and `/OpenAction` are allowed by default. If a PDF is still rejected, switch on `result.code` (`PDF_JAVASCRIPT`, `PDF_LAUNCH`, …). Only allow a denied token if you intentionally accept that feature.
+**Legitimate PDFs were rejected with `/JS/` or `/Metadata/`.**  
+That was a substring false positive ([#1](https://github.com/Naandalist/secure-file-validator/issues/1)). Current builds match name tokens only. Metadata / Annots / OpenAction pass by default. Switch on `result.code` if a file still fails.
+
+**Is this enough to call an upload “safe”?**  
+No. It reduces *wrong-type* and *obvious active-content* mistakes. Combine it with generated names, isolated storage, and a tight serving policy.
 
 ## License
 
-This project is licensed under the MIT License
+MIT
