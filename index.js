@@ -1,69 +1,30 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { inspectPdfTokens } from "./pdf-policy.js";
+import { inspectSvg } from "./svg-policy.js";
 
-/**
- * File signatures based on file format specification
- * Reference: https://en.wikipedia.org/wiki/List_of_file_signatures
- */
 const FILE_SIGNATURES = {
-  // Image signatures
-  JPEG: [
-    [0xff, 0xd8, 0xff, 0xe0], // JPEG/JFIF
-    [0xff, 0xd8, 0xff, 0xe1], // JPEG/Exif
-  ],
-  PNG: [[0x89, 0x50, 0x4e, 0x47]], // PNG signature
-  GIF: [[0x47, 0x49, 0x46, 0x38]], // GIF87a or GIF89a
-  // PDF signature
-  PDF: [[0x25, 0x50, 0x44, 0x46]], // %PDF
-  // SVG signatures - checking for XML and SVG tags
+  JPEG: [[0xff, 0xd8, 0xff]],
+  PNG: [[0x89, 0x50, 0x4e, 0x47]],
+  GIF: [[0x47, 0x49, 0x46, 0x38]],
+  PDF: [[0x25, 0x50, 0x44, 0x46]],
   SVG: [
-    [0x3c, 0x3f, 0x78, 0x6d, 0x6c], // <?xml
-    [0x3c, 0x73, 0x76, 0x67], // <svg
+    [0x3c, 0x3f, 0x78, 0x6d, 0x6c],
+    [0x3c, 0x73, 0x76, 0x67],
   ],
 };
 
-/**
- * Check if file buffer match with any specified signatures.
- *
- * @param {Buffer} buffer - File buffer to check
- * @param {Array<Array<number>>} signatures - Array of valid signatures for file type
- * @returns {boolean} True if buffer match with any of signatures, false otherwise
- */
 const checkFileSignature = (buffer, signatures) => {
   return signatures.some((signature) => {
     return signature.every((byte, index) => buffer[index] === byte);
   });
 };
 
-/**
- * Validates content of a file by checking its signature and scanning for suspicious patterns.
- *
- * @param {string} filePath - Path to the file to validate
- * @param {Object} options - Validation options
- * @returns {Promise<Object>} Object containing status (boolean) and message (string)
- */
 const validateFileContent = async (filePath, options = {}) => {
   try {
     const fileBuffer = await fs.readFile(filePath);
     const fileExtension = path.extname(filePath).toLowerCase();
     const fileContent = fileBuffer.toString();
-    const decodedContent = fileContent;
-
-    const suspiciousPatterns = [
-      /<script/i,
-      /javascript:/i,
-      /<\?php/i,
-      /eval\(/i,
-      /exec\(/i,
-      /system\(/i,
-      /function\s*\(/i,
-      /setTimeout/i,
-      /setInterval/i,
-      /onload/i,
-      /onerror/i,
-      /ActiveXObject/i,
-    ];
 
     let isValidSignature = false;
     switch (fileExtension) {
@@ -92,50 +53,16 @@ const validateFileContent = async (filePath, options = {}) => {
         isValidSignature = isValidSignature && hasPDFSignature && hasEOFMarker;
         break;
       default:
-        return {
-          status: false,
-          message: "Unsupported file type",
-        };
+        return { status: false, message: "Unsupported file type" };
     }
 
     if (!isValidSignature) {
-      return {
-        status: false,
-        message: "Invalid file signature detected",
-      };
-    }
-
-    for (const pattern of suspiciousPatterns) {
-      if (pattern.test(decodedContent) || pattern.test(fileContent)) {
-        return {
-          status: false,
-          message: `Suspicious pattern detected: ${pattern}`,
-        };
-      }
+      return { status: false, message: "Invalid file signature detected" };
     }
 
     if (fileExtension === ".svg") {
-      const svgSuspiciousPatterns = [
-        /xlink:href/i,
-        /[^a-z]href=/i,
-        /data:/i,
-        /import/i,
-        /foreignObject/i,
-        /onload/i,
-        /onclick/i,
-        /onmouseover/i,
-        /<!ENTITY/i,
-        /<!DOCTYPE/i,
-      ];
-
-      for (const pattern of svgSuspiciousPatterns) {
-        if (pattern.test(fileContent)) {
-          return {
-            status: false,
-            message: `Suspicious SVG pattern detected: ${pattern}`,
-          };
-        }
-      }
+      const svgResult = inspectSvg(fileContent, options);
+      if (svgResult) return svgResult;
     }
 
     if (fileExtension === ".pdf") {
@@ -143,15 +70,9 @@ const validateFileContent = async (filePath, options = {}) => {
       if (pdfResult) return pdfResult;
     }
 
-    return {
-      status: true,
-      message: "Content validation passed",
-    };
+    return { status: true, message: "Content validation passed" };
   } catch (error) {
-    return {
-      status: false,
-      message: `Content validation failed: ${error.message}`,
-    };
+    return { status: false, message: `Content validation failed: ${error.message}` };
   }
 };
 
@@ -163,27 +84,18 @@ const validateFile = async (filePath, options = {}) => {
 
     if (stats.size > maxSizeInBytes) {
       const sizeMB = Math.round(maxSizeInBytes / (1024 * 1024));
-      return {
-        status: false,
-        message: `File size exceeds limit of ${sizeMB}MB`,
-      };
+      return { status: false, message: `File size exceeds limit of ${sizeMB}MB` };
     }
 
     const allowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".pdf", ".svg"];
     const fileExtension = path.extname(filePath).toLowerCase();
     if (!allowedExtensions.includes(fileExtension)) {
-      return {
-        status: false,
-        message: "Invalid file extension",
-      };
+      return { status: false, message: "Invalid file extension" };
     }
 
     return validateFileContent(filePath, options);
   } catch (error) {
-    return {
-      status: false,
-      message: `File validation failed: ${error.message}`,
-    };
+    return { status: false, message: `File validation failed: ${error.message}` };
   }
 };
 
