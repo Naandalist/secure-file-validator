@@ -77,10 +77,7 @@ test("does not treat Metadata-only whitelist as a free pass for JS PDFs", async 
 test("allows Metadata and OpenAction tokens by default", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
   const file = path.join(dir, "meta.pdf");
-  await writeFile(
-    file,
-    "%PDF-1.4\n1 0 obj<</Metadata 2 0 R/OpenAction 3 0 R/Annots[]>>endobj\n%%EOF\n"
-  );
+  await writeFile(file, "%PDF-1.4\n1 0 obj<</Metadata 2 0 R/OpenAction 3 0 R/Annots[]>>endobj\n%%EOF\n");
   try {
     const result = await validateFile(file);
     assert.equal(result.status, true, result.message);
@@ -92,10 +89,7 @@ test("allows Metadata and OpenAction tokens by default", async () => {
 test("does not flag the letters JS unless they form a /JS name token", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
   const file = path.join(dir, "letters.pdf");
-  await writeFile(
-    file,
-    "%PDF-1.4\n1 0 obj<</Title (Not a JS token, just JSON-like text)>>endobj\n%%EOF\n"
-  );
+  await writeFile(file, "%PDF-1.4\n1 0 obj<</Title (Not a JS token, just JSON-like text)>>endobj\n%%EOF\n");
   try {
     const result = await validateFile(file);
     assert.equal(result.status, true, result.message);
@@ -120,14 +114,10 @@ test("detects hex-escaped PDF JavaScript names", async () => {
 test("pdf.allowOpenAction false rejects OpenAction without allowing JavaScript", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
   const file = path.join(dir, "open-action.pdf");
-  await writeFile(
-    file,
-    "%PDF-1.4\n1 0 obj<</OpenAction 2 0 R>>endobj\n%%EOF\n"
-  );
+  await writeFile(file, "%PDF-1.4\n1 0 obj<</OpenAction 2 0 R>>endobj\n%%EOF\n");
   try {
     const allowed = await validateFile(file);
     assert.equal(allowed.status, true, allowed.message);
-
     const denied = await validateFile(file, { pdf: { allowOpenAction: false } });
     assert.equal(denied.status, false, denied.message);
     assert.match(denied.message, /\/OpenAction/);
@@ -137,27 +127,71 @@ test("pdf.allowOpenAction false rejects OpenAction without allowing JavaScript",
 });
 
 test("pdf.allowJavaScript covers both /JS and /JavaScript", async () => {
-  const injected = await validateFile(asset("doc-sample-injected.pdf"), {
-    pdf: { allowJavaScript: true },
-  });
+  const injected = await validateFile(asset("doc-sample-injected.pdf"), { pdf: { allowJavaScript: true } });
   assert.equal(injected.status, true, injected.message);
-
-  const eicar = await validateFile(asset("eicar-adobe-acrobat-javascript-alert.pdf"), {
-    pdf: { allowJavaScript: true },
-  });
+  const eicar = await validateFile(asset("eicar-adobe-acrobat-javascript-alert.pdf"), { pdf: { allowJavaScript: true } });
   assert.equal(eicar.status, true, eicar.message);
-
-  const stillDenied = await validateFile(asset("doc-sample-injected.pdf"), {
-    pdf: { allowJavaScript: false },
-  });
+  const stillDenied = await validateFile(asset("doc-sample-injected.pdf"), { pdf: { allowJavaScript: false } });
   assert.equal(stillDenied.status, false);
 });
 
 test("deprecated pdfWhitelist still maps onto the structured policy", async () => {
-  const result = await validateFile(asset("doc-sample-injected.pdf"), {
-    pdfWhitelist: ["JavaScript"],
-  });
+  const result = await validateFile(asset("doc-sample-injected.pdf"), { pdfWhitelist: ["JavaScript"] });
   assert.equal(result.status, true, result.message);
+});
+
+test("accepts JPEG SOI markers beyond JFIF/Exif", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "dqt.jpg");
+  await writeFile(file, Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x02]));
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, true, result.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("does not scan raster images for HTML/JS substrings", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "fn.png");
+  await writeFile(file, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("function(onload")]));
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, true, result.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("allows an SVG DOCTYPE without ENTITY", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "doctype.svg");
+  await writeFile(file, `<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg xmlns="http://www.w3.org/2000/svg" href="#ok"><circle r="1"/></svg>`);
+  try {
+    const result = await validateFile(file);
+    assert.equal(result.status, true, result.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("rejects SVG event handlers and XXE entities", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const onload = path.join(dir, "onload.svg");
+  const entity = path.join(dir, "entity.svg");
+  await writeFile(onload, `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>`);
+  await writeFile(entity, `<svg xmlns="http://www.w3.org/2000/svg"><!ENTITY xxe SYSTEM "file:///etc/passwd"></svg>`);
+  try {
+    const onloadResult = await validateFile(onload);
+    assert.equal(onloadResult.status, false);
+    assert.match(onloadResult.message, /event handler/);
+    const entityResult = await validateFile(entity);
+    assert.equal(entityResult.status, false);
+    assert.match(entityResult.message, /ENTITY/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("checkFileSignature matches a PNG header", () => {
