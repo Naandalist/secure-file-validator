@@ -1,8 +1,30 @@
 /**
+ * Structured PDF token policy.
+ * Defaults allow Metadata / Annots / OpenAction and deny script, launch,
+ * embedded-file, XFA, and RichMedia tokens.
+ */
+export interface PdfPolicy {
+  allowMetadata?: boolean;
+  allowAnnots?: boolean;
+  allowOpenAction?: boolean;
+  /** Covers both `/JS` and `/JavaScript`. */
+  allowJavaScript?: boolean;
+  allowLaunch?: boolean;
+  allowEmbeddedFile?: boolean;
+  allowXfa?: boolean;
+  allowRichMedia?: boolean;
+}
+
+/**
  * Options for file validation
  */
 export interface ValidateFileOptions {
   maxSizeInBytes?: number;
+  pdf?: PdfPolicy;
+  /**
+   * @deprecated Use `pdf` instead. Listed names are mapped to allow* flags.
+   * `JS` and `JavaScript` both set `allowJavaScript`.
+   */
   pdfWhitelist?: string[];
 }
 
@@ -28,10 +50,12 @@ export function validateFile(
 /**
  * Validates file content
  * @param filePath - Path to the file to validate
+ * @param options - Optional configuration object
  * @returns Promise resolving to validation result
  */
 export function validateFileContent(
-  filePath: string
+  filePath: string,
+  options?: ValidateFileOptions
 ): Promise<ValidationResult>;
 
 /**

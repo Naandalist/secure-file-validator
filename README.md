@@ -76,25 +76,23 @@ PDF checks look for **name tokens** such as `/JavaScript` and `/JS` in the docum
 Allowed by default: `/Metadata`, `/Annots`, `/OpenAction`.
 Denied by default: `/JS`, `/JavaScript`, `/Launch`, `/EmbeddedFile`, `/XFA`, `/RichMedia`.
 
-`pdfWhitelist` is only needed to opt in to a denied token. Do not whitelist `JS` just to silence a metadata false positive — that case should already pass.
+Prefer the structured `pdf` policy. `allowJavaScript` covers both `/JS` and `/JavaScript`. `pdfWhitelist` still works as a deprecated alias.
 
 ```javascript
 import { validateFile } from "secure-file-validator";
 
-// Rare: you fully trust a PDF that contains JavaScript
-const result = await validateFile("path/to/file.pdf", {
-  pdfWhitelist: ["JavaScript"]
+// Safe: defaults already allow metadata. This only tightens OpenAction.
+const strict = await validateFile("path/to/file.pdf", {
+  pdf: { allowOpenAction: false }
+});
+
+// Dangerous: you fully trust a PDF that contains JavaScript
+const trusted = await validateFile("path/to/file.pdf", {
+  pdf: { allowJavaScript: true }
 });
 ```
 
-**Denied tokens that can be opted into:**
-- `JS` / `JavaScript`
-- `Launch`
-- `EmbeddedFile`
-- `XFA`
-- `RichMedia`
-
-**Note:** Only whitelist tokens you intentionally accept. Whitelisting `JavaScript` disables that check.
+**Note:** `allowJavaScript: true` disables the script check. Do not turn it on to silence a metadata false positive.
 
 ## API Reference
 
@@ -104,7 +102,8 @@ const result = await validateFile("path/to/file.pdf", {
 | --- | --- | --- | --- |
 | `filePath` | string | Path to the file to validate | required |
 | `options.maxSizeInBytes` | number | Maximum file size in bytes | 5MB |
-| `options.pdfWhitelist` | `string[]` | Denied PDF tokens to allow (e.g. `['JavaScript']`). Metadata is already allowed. | `[]` |
+| `options.pdf` | `PdfPolicy` | Structured allow/deny flags for PDF tokens | see defaults above |
+| `options.pdfWhitelist` | `string[]` | Deprecated alias mapped onto `pdf` allow flags | `[]` |
 
 Returns `{ status: boolean, message: string }`.
 
