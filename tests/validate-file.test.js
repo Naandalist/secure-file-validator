@@ -117,6 +117,49 @@ test("detects hex-escaped PDF JavaScript names", async () => {
   }
 });
 
+test("pdf.allowOpenAction false rejects OpenAction without allowing JavaScript", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sfv-"));
+  const file = path.join(dir, "open-action.pdf");
+  await writeFile(
+    file,
+    "%PDF-1.4\n1 0 obj<</OpenAction 2 0 R>>endobj\n%%EOF\n"
+  );
+  try {
+    const allowed = await validateFile(file);
+    assert.equal(allowed.status, true, allowed.message);
+
+    const denied = await validateFile(file, { pdf: { allowOpenAction: false } });
+    assert.equal(denied.status, false, denied.message);
+    assert.match(denied.message, /\/OpenAction/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("pdf.allowJavaScript covers both /JS and /JavaScript", async () => {
+  const injected = await validateFile(asset("doc-sample-injected.pdf"), {
+    pdf: { allowJavaScript: true },
+  });
+  assert.equal(injected.status, true, injected.message);
+
+  const eicar = await validateFile(asset("eicar-adobe-acrobat-javascript-alert.pdf"), {
+    pdf: { allowJavaScript: true },
+  });
+  assert.equal(eicar.status, true, eicar.message);
+
+  const stillDenied = await validateFile(asset("doc-sample-injected.pdf"), {
+    pdf: { allowJavaScript: false },
+  });
+  assert.equal(stillDenied.status, false);
+});
+
+test("deprecated pdfWhitelist still maps onto the structured policy", async () => {
+  const result = await validateFile(asset("doc-sample-injected.pdf"), {
+    pdfWhitelist: ["JavaScript"],
+  });
+  assert.equal(result.status, true, result.message);
+});
+
 test("checkFileSignature matches a PNG header", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
   assert.equal(checkFileSignature(png, [[0x89, 0x50, 0x4e, 0x47]]), true);
